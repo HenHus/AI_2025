@@ -1,5 +1,6 @@
 from typing import Any
 from queue import Queue
+from time import time
 
 
 class CSP:
@@ -115,83 +116,119 @@ class CSP:
             
         return revised
 
-    def analyze_domains(self):
-        """
-        Analyze and display information about the current domains.
-        Returns a summary of domain sizes and constraints.
-        """
-        total_vars = len(self.variables)
-        solved_vars = sum(1 for var in self.variables if len(self.domains[var]) == 1)
-        empty_domains = sum(1 for var in self.variables if len(self.domains[var]) == 0)
-        
-        domain_sizes = {}
-        for var in self.variables:
-            size = len(self.domains[var])
-            if size not in domain_sizes:
-                domain_sizes[size] = 0
-            domain_sizes[size] += 1
-        
-        print(f"Domain Analysis:")
-        print(f"  Total variables: {total_vars}")
-        print(f"  Solved variables (domain size 1): {solved_vars}")
-        print(f"  Empty domains: {empty_domains}")
-        print(f"  Domain size distribution:")
-        for size in sorted(domain_sizes.keys()):
-            print(f"    Size {size}: {domain_sizes[size]} variables")
-        
-        return {
-            'total_vars': total_vars,
-            'solved_vars': solved_vars,
-            'empty_domains': empty_domains,
-            'domain_sizes': domain_sizes
-        }
+
 
     def backtracking_search(self) -> None | dict[str, Any]:
-        """Performs backtracking search on the CSP.
+        """Backtracking search following the standard pseudocode.
         
         Returns
         -------
         None | dict[str, Any]
             A solution if any exists, otherwise None
         """
+        start_time = time()
         def backtrack(assignment: dict[str, Any]):
             self.total_backtrack_calls += 1
+            # if assignment is complete then return assignment
             if len(assignment) == len(self.variables):
                 return assignment
             
-            # Select unassigned variable (using MRV heuristic - minimum remaining values)
+            # var ← SELECT-UNASSIGNED-VARIABLE(csp, assignment)
             unassigned_vars = [v for v in self.variables if v not in assignment]
-            var = min(unassigned_vars, key=lambda v: len(self.domains[v]))
+            var = unassigned_vars[0]  # Simple selection strategy
             
-            # Try each value in the variable's domain
-            for value in list(self.domains[var]):  # Create copy since we might modify during iteration
-                # Check if this assignment is consistent with current assignments
+            # for each value in ORDER-DOMAIN-VALUES(csp, var, assignment) do
+            for value in list(self.domains[var]):
+                # if value is consistent with assignment then
                 if self._is_consistent(var, value, assignment):
-                    # Make assignment
+                    # add {var = value} to assignment
                     assignment[var] = value
                     
-                    # Save current domains before applying AC-3
-                    saved_domains = {v: domain.copy() for v, domain in self.domains.items()}
+                    # inferences ← INFERENCE(csp, var, assignment)
+                    inferences = self._make_inference(var, value, assignment)
                     
-                    # Reduce domain of assigned variable to just this value
-                    self.domains[var] = {value}
-                    
-                    # Apply AC-3 to maintain arc consistency
-                    if self.ac_3():
-                        # Recursively search with reduced domains
+                    # if inferences ≠ failure then
+                    if inferences is not None:
+                        # add inferences to csp (already applied in _make_inference)
+                        # result ← BACKTRACK(csp, assignment)
                         result = backtrack(assignment)
+                        # if result ≠ failure then return result
                         if result is not None:
                             return result
                     
-                    # Backtrack: restore domains and remove assignment
-                    self.domains = saved_domains
+                    # remove inferences from csp
+                    if inferences is not None:
+                        self._restore_inferences(inferences)
+                    # remove {var = value} from assignment
                     del assignment[var]
             
             self.total_failed_backtracks += 1
+            # return failure
             return None
+        result = backtrack({})
+        end_time = time()
+        print(f"Backtracking search took {end_time - start_time:.4f} seconds")
+        return result
+
+
+
+    def _make_inference(self, var: str, value: Any, assignment: dict[str, Any]) -> dict[str, set] | None:
+        """Make inferences after assigning value to var.
         
-        return backtrack({})
+        Toggle between AC-3 inference and no inference by commenting/uncommenting sections.
+        
+        Parameters
+        ----------
+        var : str
+            The variable that was just assigned
+        value : Any
+            The value assigned to var
+        assignment : dict[str, Any]
+            Current assignment
+            
+        Returns
+        -------
+        dict[str, set] | None
+            Dictionary of removed values for each variable, or None if failure
+        """
+        
+        # # OPTION 1: AC-3 Inference
+        # # Save current domains before applying AC-3
+        # original_domains = {v: domain.copy() for v, domain in self.domains.items()}
+        
+        # # Reduce domain of assigned variable to just this value
+        # self.domains[var] = {value}
+        
+        # # Apply AC-3 to maintain arc consistency
+        # if self.ac_3():
+        #     # AC-3 succeeded, calculate what was removed
+        #     removed_values = {}
+        #     for variable in self.domains:
+        #         original = original_domains[variable]
+        #         current = self.domains[variable]
+        #         removed = original - current
+        #         if removed:
+        #             removed_values[variable] = removed
+        #     return removed_values
+        # else:
+        #     # AC-3 failed (domain became empty), restore domains
+        #     self.domains = original_domains
+        #     return None
+        
+        # # OPTION 2: No inference (naive backtracking)
+        return {}
     
+    def _restore_inferences(self, inferences: dict[str, set]) -> None:
+        """Restore domain values that were removed during AC-3 inference.
+        
+        Parameters
+        ----------
+        inferences : dict[str, set]
+            Dictionary mapping variables to sets of values that were removed
+        """
+        for variable, removed_values in inferences.items():
+            self.domains[variable].update(removed_values)
+
     def _is_consistent(self, var: str, value: Any, assignment: dict[str, Any]) -> bool:
         """Check if assigning value to var is consistent with current assignment.
         
@@ -218,6 +255,8 @@ class CSP:
                 if (assigned_value, value) not in self.binary_constraints[(assigned_var, var)]:
                     return False
         return True
+    
+
 
 
 def alldiff(variables: list[str]) -> list[tuple[str, str]]:
