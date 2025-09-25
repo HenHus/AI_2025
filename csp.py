@@ -23,6 +23,9 @@ class CSP:
         self.variables = variables
         self.domains = domains
 
+        self.total_backtrack_calls = 0
+        self.total_failed_backtracks = 0
+
         # Binary constraints as a dictionary mapping variable pairs to a set of value pairs.
         #
         # To check if variable1=value1, variable2=value2 is in violation of a binary constraint:
@@ -112,6 +115,37 @@ class CSP:
             
         return revised
 
+    def analyze_domains(self):
+        """
+        Analyze and display information about the current domains.
+        Returns a summary of domain sizes and constraints.
+        """
+        total_vars = len(self.variables)
+        solved_vars = sum(1 for var in self.variables if len(self.domains[var]) == 1)
+        empty_domains = sum(1 for var in self.variables if len(self.domains[var]) == 0)
+        
+        domain_sizes = {}
+        for var in self.variables:
+            size = len(self.domains[var])
+            if size not in domain_sizes:
+                domain_sizes[size] = 0
+            domain_sizes[size] += 1
+        
+        print(f"Domain Analysis:")
+        print(f"  Total variables: {total_vars}")
+        print(f"  Solved variables (domain size 1): {solved_vars}")
+        print(f"  Empty domains: {empty_domains}")
+        print(f"  Domain size distribution:")
+        for size in sorted(domain_sizes.keys()):
+            print(f"    Size {size}: {domain_sizes[size]} variables")
+        
+        return {
+            'total_vars': total_vars,
+            'solved_vars': solved_vars,
+            'empty_domains': empty_domains,
+            'domain_sizes': domain_sizes
+        }
+
     def backtracking_search(self) -> None | dict[str, Any]:
         """Performs backtracking search on the CSP.
         
@@ -121,6 +155,7 @@ class CSP:
             A solution if any exists, otherwise None
         """
         def backtrack(assignment: dict[str, Any]):
+            self.total_backtrack_calls += 1
             if len(assignment) == len(self.variables):
                 return assignment
             
@@ -152,6 +187,7 @@ class CSP:
                     self.domains = saved_domains
                     del assignment[var]
             
+            self.total_failed_backtracks += 1
             return None
         
         return backtrack({})
