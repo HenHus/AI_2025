@@ -20,7 +20,7 @@ def print_solution(solution):
 
 
 # Choose Sudoku problem
-grid = open('sudoku_very_hard.txt').read().split()
+grid = open('sudoku_easy.txt').read().split()
 
 width = 9
 box_width = 3
@@ -56,6 +56,8 @@ csp = CSP(
 
 print(csp.ac_3())
 print_solution(csp.backtracking_search())
+print(f"Total backtrack calls: {csp.total_backtrack_calls}")
+print(f"Total failed backtracks: {csp.total_failed_backtracks}")
 
 # Expected output after implementing csp.ac_3() and csp.backtracking_search():
 # True
